@@ -23,7 +23,7 @@ class Scanner {
  start = current;
  scanToken();
  }
- tokens.add(new Token(EOF, "", null, line));
+ tokens.add(new Token(EOF,"", null, line));
  return tokens;
  }
 
@@ -61,8 +61,8 @@ private void scanToken() {
  case '+': addToken(PLUS); break;
  case ';': addToken(SEMICOLON); break;
  case '*': addToken(STAR); break;
-
  case '*': addToken(STAR); break;
+//> two-char-tokens
  case '!':
  addToken(match('=') ? BANG_EQUAL : BANG);
  break;
@@ -75,6 +75,8 @@ private void scanToken() {
  case '>':
  addToken(match('=') ? GREATER_EQUAL : GREATER);
  break;
+//< two-char-tokens
+//> slash
 
  case '/':
  if (match('/')) {
@@ -85,6 +87,10 @@ private void scanToken() {
  }
  break;
 
+//< slash
+//> whitespace
+
+
  case ' ':
  case '\r':
  case '\t':
@@ -94,13 +100,34 @@ private void scanToken() {
  line++;
  break;
 
+//< whitespace
+//> string-start
+
+//  string literal
+
+ case '"': string(); break;
+//< string-start
+//> char-error
+
 
  default:
+ 
  Lox.error(line, "Unexpected character.");
  break;
 
  }
  }
+ private void string() {
+ while (peek() != '"' && !isAtEnd()) {
+ if (peek() == '\n') line++;
+ advance();
+ }
+ if (isAtEnd()) {
+ Lox.error(line, "Unterminated string.");
+ return;
+ }
+
+
 
 
  private boolean match(char expected) {
@@ -116,8 +143,22 @@ private void scanToken() {
  }
 
 
+ private void string() {
+    while (peek() != '"' && !isAtEnd()) {
+    if (peek() == '\n') line++;
+    advance();
+    }
+    if (isAtEnd()) {
+    Lox.error(line, "Unterminated string.");
+    return;
+    }
 
 
+ advance();
+
+ String value = source.substring(start + 1, current - 1);
+ addToken(STRING, value);
+ }
 
 
 }
