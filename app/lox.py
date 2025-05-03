@@ -1,3 +1,4 @@
+from abc import abstractmethod
 import sys
 from typing import List
 
@@ -75,14 +76,23 @@ class Lox:
         Lox.hadError = True
 
 class Expr:
+    
     class Visitor:
+        @abstractmethod
         def visit_binary_expr(self, expr): pass
+        @abstractmethod
         def visit_grouping_expr(self, expr): pass
+        @abstractmethod
         def visit_literal_expr(self, expr): pass
+        @abstractmethod
         def visit_unary_expr(self, expr): pass
+
 
     def accept(self, visitor):
         pass
+
+# stamtent visitor calss    
+
 
 class Binary(Expr):
     def __init__(self, left, operator, right):
@@ -92,6 +102,9 @@ class Binary(Expr):
 
     def accept(self, visitor):
         return visitor.visit_binary_expr(self)
+    
+    # def __str__(self):
+    #     return f"Binary({self.left}, {self.operator}, {self.right})"
 
 class Grouping(Expr):
     def __init__(self, expression):
@@ -100,12 +113,18 @@ class Grouping(Expr):
     def accept(self, visitor):
         return visitor.visit_grouping_expr(self)
 
+    # def __str__(self):
+    #     return f"Binary({self.left}, {self.operator}, {self.right})"
+
 class Literal(Expr):
     def __init__(self, value):
         self.value = value
 
     def accept(self, visitor):
         return visitor.visit_literal_expr(self)
+    
+    # def __str__(self):
+    #     return f"{self.value}"
 
 class Unary(Expr):
     def __init__(self, operator, right):
@@ -114,6 +133,9 @@ class Unary(Expr):
 
     def accept(self, visitor):
         return visitor.visit_unary_expr(self)
+    
+    # def __str__(self):
+    #     return f"{self.value}"
 
 class AstPrinter(Expr.Visitor):
     def print(self, expr):
@@ -139,6 +161,40 @@ class AstPrinter(Expr.Visitor):
     def visit_unary_expr(self, expr):
         return self.parenthesize(expr.operator.lexeme, expr.right)
 
+class Stmt:
+    class Visitor:
+        @abstractmethod
+        def visit_print_stmt(self, stmt): pass
+        @abstractmethod
+        def visit_expression_stmt(self, stmt): pass
+
+class PrintStmt(Stmt):
+    def __init__(self, expression):
+        self.expression = expression
+
+    def accept(self, visitor):
+        return visitor.visit_print_stmt(self)
+
+class ExpressionStmt(Stmt):
+    def __init__(self, expression):
+        self.expression = expression
+
+    def accept(self, visitor):
+        return visitor.visit_expression_stmt(self)
+
+
+
+# class Print(Stmt):
+#     def __init__(self, expression):
+#         self.expression = expression
+
+#     def accept(self, visitor):
+#         return visitor.visit_print_stmt(self)
+
+
+
+
+
 class ParseError(RuntimeError):
     pass
 
@@ -147,15 +203,46 @@ class Parser:
         self.tokens = tokens
         self.current = 0
 
+    # def parse(self):
+    #     try:
+    #         return self.expression()
+    #     except ParseError:
+    #         return None
+    
+    # def parse(self):
+    #     statements = []
+    #     while not self.is_at_end():
+    #         statements.append(self.statement())
+    #     return statements
+    
     def parse(self):
-        try:
-            return self.expression()
-        except ParseError:
-            return None
+        statements = []
+        while not self.is_at_end():
+            stmt = self.statement()
+            if stmt is not None:
+                statements.append(stmt)
+        return statements
 
     def expression(self):
         return self.equality()
+    
+    def statement(self):
+        if self.match(TokenType.PRINT):
+            return self.print_statement()
+        return self.expression_statement()
+    
 
+    def print_statement(self):
+        value = self.expression()
+        self.consume(TokenType.SEMICOLON, "Expect ';' after value.")
+        return PrintStmt(value)
+    
+    def expression_statement(self):
+        expr = self.expression()
+        self.consume(TokenType.SEMICOLON, "Expect ';' after expression.")
+        return ExpressionStmt(expr)
+        
+    
     def equality(self):
         expr = self.comparison()
 
@@ -386,14 +473,31 @@ class Scanner:
         type = self.keywords.get(text, TokenType.IDENTIFIER)
         self.add_token(type)
 
-class Interpreter(Expr.Visitor):
-    def interpret(self, expr):
+
+
+    
+class Interpreter(Stmt.Visitor, Expr.Visitor):
+    def interpret(self, statements):
         try:
-            value = self.evaluate(expr)
-            print(self.stringify(value))
+            for statement in statements:
+                self.execute(statement)
         except RuntimeError as error:
             print(f"Runtime error: {error}")
 
+    def execute(self, stmt):
+        stmt.accept(self)
+
+    # --- Statement Visitors ---
+    def visit_print_stmt(self, stmt):
+        value = self.evaluate(stmt.expression)
+        print(self.stringify(value))
+        return None
+
+    def visit_expression_stmt(self, stmt):
+        self.evaluate(stmt.expression)
+        return None
+
+    # --- Expression Visitors ---
     def evaluate(self, expr):
         return expr.accept(self)
 
@@ -463,6 +567,7 @@ class Interpreter(Expr.Visitor):
 
         return None  # Unreachable
 
+    # --- Helper Methods ---
     def is_truthy(self, obj):
         if obj is None:
             return False
@@ -483,15 +588,24 @@ class Interpreter(Expr.Visitor):
             return
         raise RuntimeError(f"Operands must be numbers: {operator}")
 
-    def stringify(self, obj):
-        if obj is None:
+    def stringify(self, value):
+        if value is None:
             return "nil"
-        if isinstance(obj, float):
-            text = str(obj)
-            if text.endswith(".0"):
-                text = text[:-2]
-            return text
-        return str(obj)
+        elif isinstance(value, bool):
+            return "true" if value else "false"
+        return str(value)
+    
+#   def stringify(self, obj):
+#         if obj is None:
+#             return "nil"
+#         if isinstance(obj, float):
+#             text = str(obj)
+#             if text.endswith(".0"):
+#                 text = text[:-2]
+#             return text
+#         return str(obj)
+    
+    
     
 
 

@@ -6,10 +6,18 @@ def run(source):
     tokens = scanner.scan_tokens()
 
     parser = Parser(tokens)
-    expression = parser.parse()
+    # expression = parser.parse()
+    statements = parser.parse()
+
 
     interpreter = Interpreter()
-    result = interpreter.interpret(expression)
+    result = interpreter.interpret(statements)
+
+
+    
+
+
+    
 
     # print(f"Result: {result}")
 
