@@ -2,6 +2,9 @@ from abc import abstractmethod
 import sys
 from typing import List
 from env import Environment
+from lox_callable import *
+from lox_function import LoxFunction
+from _return import Return
 
 class TokenType:
     LEFT_PAREN = 'LEFT_PAREN'
@@ -91,6 +94,11 @@ class Expr:
         def visit_variable_expr(self, expr): pass
         @abstractmethod
         def visit_assign_expr(self, expr): pass
+        @abstractmethod
+        def visit_logical_expr(self,expr): pass
+        @abstractmethod
+        def visit_call_expr(self, expr): pass
+
 
 
     def accept(self, visitor):
@@ -142,6 +150,17 @@ class Unary(Expr):
     # def __str__(self):
     #     return f"{self.value}"
 
+class Call(Expr):
+    def __init__(self, callee, paren, arguments):
+        self.callee = callee
+        self.paren = paren
+        self.arguments = arguments
+
+    def accept(self, visitor):
+        return visitor.visit_call_expr(self)
+
+
+
 class Variable(Expr):
     def __init__(self, name):
         self.name = name
@@ -155,6 +174,16 @@ class Assign(Expr):
         self.value = value  # Expr
     def accept(self, visitor):
         return visitor.visit_assign_expr(self)
+
+class Logical(Expr):
+    def __init__(self, left, operator, right):
+        self.left = left
+        self.operator = operator
+        self.right = right
+
+    def accept(self, visitor):
+        return visitor.visit_logical_expr(self)
+
 
 
 class AstPrinter(Expr.Visitor):
@@ -191,6 +220,15 @@ class Stmt:
         def visit_var_stmt(self, stmt): pass
         @abstractmethod
         def visit_block_stmt(self, stmt): pass
+        @abstractmethod
+        def visit_if_stmt(self, stmt): pass
+        @abstractmethod
+        def visit_while_stmt(self, stmt): pass
+        @abstractmethod
+        def visit_function_stmt(self, stmt): pass
+        @abstractmethod
+        def visit_return_stmt(self, stmt): pass
+
         
 class Block(Stmt):
     def __init__(self, statements):
@@ -230,6 +268,56 @@ class If(Stmt):
 
     def accept(self, visitor):
         return visitor.visit_if_stmt(self)
+
+class While(Stmt):
+    
+    def __init__(self, condition, body):
+        self.condition = condition
+        self.body = body
+
+    def accept(self, visitor):
+        return visitor.visit_while_stmt(self)
+
+
+class Function(Stmt):
+    def __init__(self, name, params, body):
+        self.name = name
+        self.params = params
+        self.body = body
+
+    def accept(self, visitor):
+        return visitor.visit_function_stmt(self)
+
+
+class ReturnStmt(Stmt):
+    def __init__(self , keyword, value ):
+        self.keyword = keyword
+        self.value  = value
+
+    def accept(self, visitor):
+        return visitor.visit_return_stmt(self)
+
+# class LoxFunction:
+#     def __init__(self, declaration):
+#         self.declaration = declaration
+
+#     def call(self, interpreter, arguments):
+#         environment = Environment(interpreter.globals)
+#         for i in range(len(self.declaration.params)):
+#             param_name = self.declaration.params[i].lexeme
+#             environment.define(param_name, arguments[i])
+
+#         interpreter.execute_block(self.declaration.body, environment)
+#         return None
+
+#     def arity(self):
+#         return len(self.declaration.params)
+
+#     def __str__(self):
+#         return f"<fn {self.declaration.name.lexeme}>"
+
+
+
 
 
 # class Print(Stmt):
@@ -273,13 +361,36 @@ class Parser:
 
     def declaration(self):
         try:
-            if self.match('VAR'):
+            if self.match(TokenType.FUN):
+                return self.function("function")
+            if self.match(TokenType.VAR):
                 return self.var_declaration()
             return self.statement()
         except ParseError:
             self.synchronize()
             return None
         
+    def function(self, kind):
+        name = self.consume(TokenType.IDENTIFIER, f"Expect {kind} name.")
+        self.consume(TokenType.LEFT_PAREN, f"Expect '(' after {kind} name.")
+        
+        parameters = []
+        if not self.check(TokenType.RIGHT_PAREN):
+            while True:
+                if len(parameters) >= 255:
+                    self.error(self.peek(), "Can't have more than 255 parameters.")
+                parameters.append(
+                    self.consume(TokenType.IDENTIFIER, "Expect parameter name.")
+                )
+                if not self.match(TokenType.COMMA):
+                    break
+
+        self.consume(TokenType.RIGHT_PAREN, "Expect ')' after parameters.")
+        self.consume(TokenType.LEFT_BRACE, f"Expect "'{'" before {kind} body.")
+        body = self.block()
+
+        return Function(name, parameters, body)
+    
     def synchronize(self):
         self.advance()
 
@@ -320,6 +431,26 @@ class Parser:
                 raise RuntimeError(f"Invalid assignment target: {equals}")
         
         return expr
+    
+    def or_(self):
+        expr = self.and_()
+
+        while self.match(TokenType.OR):
+            operator = self.previous()
+            right = self.and_()
+            expr = Logical(expr, operator, right)
+
+        return expr
+
+    def and_(self):
+        expr = self.equality()
+
+        while self.match(TokenType.AND):
+            operator = self.previous()
+            right = self.equality()
+            expr = Logical(expr, operator, right)
+
+        return expr
 
     def block(self):
         statements = []
@@ -337,6 +468,13 @@ class Parser:
             return self.if_statement()
         if self.match(TokenType.LEFT_BRACE):
             return Block(self.block())
+        if self.match(TokenType.RETURN):
+            return self.return_statement()
+        if self.match(TokenType.WHILE):
+            return self.while_statement()
+        if self.match(TokenType.FOR):
+            return self.for_statement()
+        
 
         return self.expression_statement()
     
@@ -353,12 +491,81 @@ class Parser:
             else_branch = self.statement()
 
         return If(condition, then_branch, else_branch)
+    
+
+    def while_statement(self):
+        self.consume('LEFT_PAREN', "Expect '(' after 'while'.")
+        condition = self.expression()
+        self.consume('RIGHT_PAREN', "Expect ')' after condition.")
+
+        body = self.statement()
+
+        return While(condition, body)
+    
+    def for_statement(self):
+        self.consume(TokenType.LEFT_PAREN, "Expect '(' after 'for'.")
+
+        # --- Initializer ---
+        if self.match(TokenType.SEMICOLON):
+            initializer = None
+        elif self.match(TokenType.VAR):
+            initializer = self.var_declaration()
+        else:
+            initializer = self.expression_statement()
+
+        # --- Condition ---
+        condition = None
+        if not self.check(TokenType.SEMICOLON):
+            condition = self.expression()
+        self.consume(TokenType.SEMICOLON, "Expect ';' after loop condition.")
+
+        # --- Increment ---
+        increment = None
+        if not self.check(TokenType.RIGHT_PAREN):
+            increment = self.expression()
+        self.consume(TokenType.RIGHT_PAREN, "Expect ')' after for clauses.")
+
+        # --- Body ---
+        body = self.statement()
+
+        # Desugar: Add increment after the body
+        if increment is not None:
+            body = Block([
+                body,
+                ExpressionStmt(increment)
+            ])
+
+        # Desugar: Use true if no condition
+        if condition is None:
+            condition = Literal(True)
+
+        body = While(condition, body)
+
+        # Desugar: Wrap initializer before the loop
+        if initializer is not None:
+            body = Block([initializer, body])
+
+        return body
+
+
 
 
     def print_statement(self):
         value = self.expression()
         self.consume(TokenType.SEMICOLON, "Expect ';' after value.")
         return PrintStmt(value)
+    
+
+    def return_statement(self):
+        
+        keyword = self.previous()
+        value = None
+        if not self.check(TokenType.SEMICOLON):
+            value = self.expression()
+
+        self.consume(TokenType.SEMICOLON, "Expect ';' after return value.")
+        return ReturnStmt(keyword, value)
+
     
     def var_declaration(self):
         name = self.consume('IDENTIFIER', "Expect variable name.")
@@ -422,7 +629,32 @@ class Parser:
             right = self.unary()
             return Unary(operator, right)
 
-        return self.primary()
+        return self.call()
+    
+    def call(self):
+
+        expr = self.primary()
+
+        while True:
+            if self.match(TokenType.LEFT_PAREN):
+                expr = self.finish_call(expr)
+            else:
+                break
+        return expr
+    
+    def finish_call(self, callee):
+        arguments = []
+        if not self.check(TokenType.RIGHT_PAREN):
+            while True:
+                if len(arguments) >= 255:
+                    self.error(self.peek(), "Can't have more than 255 arguments.")
+                arguments.append(self.expression())
+                if not self.match(TokenType.COMMA):
+                    break
+
+        paren = self.consume(TokenType.RIGHT_PAREN, "Expect ')' after arguments.")
+        return Call(callee, paren, arguments)
+
 
     def primary(self):
         if self.match(TokenType.FALSE):
@@ -622,6 +854,12 @@ class Interpreter(Stmt.Visitor, Expr.Visitor):
     def __init__(self):
         self.environment = Environment()
 
+        self.globals = Environment()
+        self.environment = self.globals
+
+        # Define native function "clock"
+        self.globals.define("clock", Clock())
+
 
     def interpret(self, statements):
         try:
@@ -655,11 +893,21 @@ class Interpreter(Stmt.Visitor, Expr.Visitor):
             return self.execute(stmt.else_branch)
         return None
 
+    def visit_while_stmt(self, stmt):
+        while self.is_truthy(self.evaluate(stmt.condition)):
+            self.execute(stmt.body)
+        return None
     
     def visit_assign_expr(self, expr):
         value = self.evaluate(expr.value)
         self.environment.assign(expr.name, value)
         return value
+    
+    def visit_return_stmt(self, stmt):
+        value = None
+        if stmt.value is not None:
+            value = self.evaluate(stmt.value)
+        raise Return(value)
     
 
     def visit_expression_stmt(self, stmt):
@@ -670,6 +918,27 @@ class Interpreter(Stmt.Visitor, Expr.Visitor):
     def visit_block_stmt(self, stmt):
         self.execute_block(stmt.statements, Environment(self.environment))
         return None
+
+    def visit_logical_expr(self, expr):
+        left = self.evaluate(expr.left)
+
+        if expr.operator.type == TokenType.OR:
+            if self.is_truthy(left):
+                return left
+        else:  # AND
+            if not self.is_truthy(left):
+                return left
+
+        return self.evaluate(expr.right)
+    
+    def visit_function_stmt(self, stmt):
+        function = LoxFunction(stmt,self.environment)
+        self.environment.define(stmt.name.lexeme, function)
+
+
+        return None
+
+
 
     def execute_block(self, statements, environment):
         previous = self.environment
@@ -752,6 +1021,21 @@ class Interpreter(Stmt.Visitor, Expr.Visitor):
             return self.is_equal(left, right)
 
         return None  # Unreachable
+    
+    def visit_call_expr(self, expr):
+        callee = self.evaluate(expr.callee)
+
+        arguments = []
+        for argument in expr.arguments:
+            arguments.append(self.evaluate(argument))
+
+        if not isinstance(callee, LoxCallable):
+            raise RuntimeError(expr.paren, "Can only call functions and classes.")
+
+        if len(arguments) != callee.arity():
+            raise RuntimeError(expr.paren, f"Expected {callee.arity()} arguments but got {len(arguments)}.")
+
+        return callee.call(self, arguments)
 
     # --- Helper Methods ---
     def is_truthy(self, obj):

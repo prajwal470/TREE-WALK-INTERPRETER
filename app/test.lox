@@ -1,6 +1,13 @@
-var x = 5;
-if (x > 3) {
-  print "x is greater than 3";
-} else {
-  print "x is not greater than 3";
+fun makeCounter() {
+  var i = 0;
+  fun count() {
+    i = i + 1;
+    print i;
+  }
+
+  return count;
 }
+
+var counter = makeCounter();
+counter(); // "1".
+counter(); // "2".
