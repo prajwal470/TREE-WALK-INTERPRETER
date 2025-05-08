@@ -1,6 +1,10 @@
 import sys
-from lox import Scanner, Parser, AstPrinter, Lox , Interpreter
+
 from reslover import Resolver
+from lox_scanner import Scanner 
+from lox_parser import Parser
+from lox_interpreter import Interpreter
+
 
 def run(source):
     scanner = Scanner(source)
@@ -9,7 +13,9 @@ def run(source):
     parser = Parser(tokens)
     # expression = parser.parse()
     statements = parser.parse()
-
+    
+    for stmt in statements:
+        print(stmt)
 
     interpreter = Interpreter()
     
@@ -17,7 +23,7 @@ def run(source):
     resolver = Resolver(interpreter)
     resolver.resolve(statements)
     
-
+    
     interpreter.interpret(statements)
     
 

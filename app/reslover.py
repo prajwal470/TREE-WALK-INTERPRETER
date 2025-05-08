@@ -2,26 +2,81 @@ from lox import *
 from typing import List, Dict
 from token_type import TokenType , Token
 from enum import Enum
+from lox_stmt import *
+from lox_expression import *
+from lox import Lox
+from _return import Return
+
+
+
+
+
 
 class FunctionType(Enum):
     NONE = 0
     FUNCTION = 1
+    INITIALIZER = 2
+    METHOD = 3
+
+class ClassType(Enum):
+    NONE = 0
+    CLASS = 1
+    SUBCLASS = 2
+
+
 
 class Resolver(Expr, Stmt):
+
+    
+    # 
+
     def __init__(self, interpreter):
         self.interpreter = interpreter
         self.scopes: List[Dict[str, bool]] = []
         self.current_function = FunctionType.NONE
+        self.currentClass = ClassType.NONE
 
     def visitBlockStmt(self, stmt: Block):
         self.begin_scope()
         self.resolve(stmt.statements)
         self.end_scope()
         return None
+    
+    def visit_class_stmt(self, stmt: Class):
+
+        enclosing_class = self.currentClass
+        self.currentClass = ClassType.CLASS
+
+
+        self.declare(stmt.name)
+        self.define(stmt.name)
+
+        if stmt.superclass is not None:
+            if stmt.name.lexeme == stmt.superclass.name.lexeme:
+                Lox.error(stmt.superclass.name, "A class can't inherit from itself.")
+            self.resolve_expr(stmt.superclass)
+            
+        self.begin_scope()
+
+        self.scopes[-1]["this"] = True
+
+
+        for method in stmt.methods:
+            declaration = FunctionType.METHOD
+
+            if method.name.lexeme == "init":
+                declaration = FunctionType.INITIALIZER
+
+            self.resolve_function(method, declaration)
+
+        self.end_scope()
+        self.currentClass = enclosing_class
+        return None
 
     def resolve(self, statements: List[Stmt]):
         for stmt in statements:
             self.resolve_stmt(stmt)
+            
 
     def resolve_stmt(self, stmt: Stmt):
         stmt.accept(self)
@@ -132,6 +187,10 @@ class Resolver(Expr, Stmt):
         if self.current_function == FunctionType.NONE:
             Lox.error(stmt.keyword, "Can't return from top-level code.")
         if stmt.value:
+
+            if self.current_function == FunctionType.INITIALIZER:
+                Lox.error(stmt.keyword, "Can't return a value from an initializer.")
+
             self.resolve_expr(stmt.value)
         return None
 
@@ -150,6 +209,10 @@ class Resolver(Expr, Stmt):
         for arg in expr.arguments:
             self.resolve_expr(arg)
         return None
+    
+    def visit_get_expr(self, expr: Get):
+        self.resolve_expr(expr.object)
+        return None
 
     def visit_grouping_expr(self, expr: Grouping):
         self.resolve_expr(expr.expression)
@@ -162,6 +225,24 @@ class Resolver(Expr, Stmt):
         self.resolve_expr(expr.left)
         self.resolve_expr(expr.right)
         return None
+    
+    def visit_set_expr(self, expr: Set):
+        self.resolve_expr(expr.value)
+        self.resolve_expr(expr.object)
+        return None
+
+    def visit_this_expr(self, expr: This):
+        self.resolve_local(expr, expr.keyword)
+
+        if self.currentClass == ClassType.NONE:
+            Lox.error(expr.keyword, "Can't use 'this' outside of a class.")
+       
+
+
+        return None
+   
+
+
 
     def visit_unary_expr(self, expr: Unary):
         self.resolve_expr(expr.right)
