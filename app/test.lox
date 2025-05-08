@@ -1,13 +1,14 @@
-fun makeCounter() {
-  var i = 0;
-  fun count() {
-    i = i + 1;
-    print i;
-  }
-
-  return count;
+fun printTwice(msg) {
+  print msg;
+  print msg;
 }
 
-var counter = makeCounter();
-counter(); // "1".
-counter(); // "2".
+fun main() {
+  var greeting = "Hello, world!";
+  printTwice(greeting);
+
+  greeting = "Hi again!";
+  printTwice(greeting);
+}
+
+main();

@@ -1,5 +1,6 @@
 import sys
 from lox import Scanner, Parser, AstPrinter, Lox , Interpreter
+from reslover import Resolver
 
 def run(source):
     scanner = Scanner(source)
@@ -11,12 +12,13 @@ def run(source):
 
 
     interpreter = Interpreter()
-    result = interpreter.interpret(statements)
-
-
     
 
+    resolver = Resolver(interpreter)
+    resolver.resolve(statements)
+    
 
+    interpreter.interpret(statements)
     
 
     # print(f"Result: {result}")

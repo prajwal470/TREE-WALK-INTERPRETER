@@ -5,64 +5,8 @@ from env import Environment
 from lox_callable import *
 from lox_function import LoxFunction
 from _return import Return
+from token_type import TokenType , Token
 
-class TokenType:
-    LEFT_PAREN = 'LEFT_PAREN'
-    RIGHT_PAREN = 'RIGHT_PAREN'
-    LEFT_BRACE = 'LEFT_BRACE'
-    RIGHT_BRACE = 'RIGHT_BRACE'
-    COMMA = 'COMMA'
-    DOT = 'DOT'
-    MINUS = 'MINUS'
-    PLUS = 'PLUS'
-    SEMICOLON = 'SEMICOLON'
-    SLASH = 'SLASH'
-    STAR = 'STAR'
-
-    BANG = 'BANG'
-    BANG_EQUAL = 'BANG_EQUAL'
-    EQUAL = 'EQUAL'
-    EQUAL_EQUAL = 'EQUAL_EQUAL'
-    GREATER = 'GREATER'
-    GREATER_EQUAL = 'GREATER_EQUAL'
-    LESS = 'LESS'
-    LESS_EQUAL = 'LESS_EQUAL'
-
-    IDENTIFIER = 'IDENTIFIER'
-    STRING = 'STRING'
-    NUMBER = 'NUMBER'
-
-    AND = 'AND'
-    CLASS = 'CLASS'
-    ELSE = 'ELSE'
-    FALSE = 'FALSE'
-    FUN = 'FUN'
-    FOR = 'FOR'
-    IF = 'IF'
-    NIL = 'NIL'
-    OR = 'OR'
-    PRINT = 'PRINT'
-    RETURN = 'RETURN'
-    SUPER = 'SUPER'
-    THIS = 'THIS'
-    TRUE = 'TRUE'
-    VAR = 'VAR'
-    WHILE = 'WHILE'
-
-    EOF = 'EOF'
-
-class Token:
-    def __init__(self, type, lexeme, literal, line):
-        self.type = type
-        self.lexeme = lexeme
-        self.literal = literal
-        self.line = line
-
-    def __str__(self):
-        return f"{self.type} {self.lexeme} {self.literal}"
-
-    def __repr__(self):
-        return self.__str__()
 
 class Lox:
     hadError = False
@@ -853,7 +797,7 @@ class Interpreter(Stmt.Visitor, Expr.Visitor):
 
     def __init__(self):
         self.environment = Environment()
-
+        self.locals: dict[Expr, int] = {}
         self.globals = Environment()
         self.environment = self.globals
 
@@ -872,6 +816,8 @@ class Interpreter(Stmt.Visitor, Expr.Visitor):
     def execute(self, stmt):
         stmt.accept(self)
 
+    def resolve(self, expr: Expr, depth: int):
+        self.locals[expr] = depth
  
     # --- Statement Visitors ---
     def visit_print_stmt(self, stmt):
@@ -898,11 +844,15 @@ class Interpreter(Stmt.Visitor, Expr.Visitor):
             self.execute(stmt.body)
         return None
     
-    def visit_assign_expr(self, expr):
+    def visit_assign_expr(self, expr: Assign):
         value = self.evaluate(expr.value)
-        self.environment.assign(expr.name, value)
+        distance = self.locals.get(expr)
+        if distance is not None:
+            self.environment.assign_at(distance, expr.name, value)
+        else:
+            self.globals.assign(expr.name, value)
         return value
-    
+
     def visit_return_stmt(self, stmt):
         value = None
         if stmt.value is not None:
@@ -971,7 +921,15 @@ class Interpreter(Stmt.Visitor, Expr.Visitor):
         return None  # Unreachable
     
     def visit_variable_expr(self, expr):
-        return self.environment.get(expr.name)
+        # return self.environment.get(expr.name)
+        return self.look_up_variable(expr.name, expr)
+    
+    def look_up_variable(self, name: Token, expr: Expr):
+        distance = self.locals.get(expr)
+        if distance is not None:
+            return self.environment.get_at(distance, name.lexeme)
+        else:
+            return self.globals.get(name)
 
     def visit_binary_expr(self, expr):
         left = self.evaluate(expr.left)
