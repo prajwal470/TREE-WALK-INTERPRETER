@@ -14,8 +14,7 @@ def run(source):
     # expression = parser.parse()
     statements = parser.parse()
     
-    for stmt in statements:
-        print(stmt)
+
 
     interpreter = Interpreter()
     

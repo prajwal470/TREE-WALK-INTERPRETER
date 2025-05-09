@@ -148,6 +148,18 @@ class Interpreter(Stmt.Visitor, Expr.Visitor):
 
         raise RuntimeError(expr.name, "Only instances have fields.")
     
+
+    def visit_super_expr(self, expr):
+        distance = self.locals.get(expr)
+        superclass = self.environment.get_at(distance, "super")
+        object = self.environment.get_at(distance - 1, "this")
+        method = superclass.find_method(expr.method.lexeme)
+        
+
+        if method is None:
+            raise RuntimeError(expr.method, "Undefined property '" + expr.method.lexeme + "'.")
+        return method.bind(object)    
+
     def visit_function_stmt(self, stmt):
         function = LoxFunction(stmt,self.environment , False)
         self.environment.define(stmt.name.lexeme, function)

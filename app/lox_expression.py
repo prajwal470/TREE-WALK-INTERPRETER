@@ -21,6 +21,8 @@ class Expr:
         def visit_call_expr(self, expr): pass
         @abstractmethod
         def visit_this_expr(self, expr): pass
+        @abstractmethod
+        def visit_super_expr(self, expr): pass
 
 
 
@@ -132,3 +134,10 @@ class This(Expr):
     def accept(self, visitor):
         return visitor.visit_this_expr(self)
     
+class Super(Expr):
+    def __init__(self, keyword, method):
+        self.keyword = keyword  # Token
+        self.method = method    # Token
+
+    def accept(self, visitor):
+        return visitor.visit_super_expr(self)
